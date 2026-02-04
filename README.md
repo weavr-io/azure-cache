@@ -1,371 +1,354 @@
-# Cache action
+# Azure Cache Action
 
-This action allows caching dependencies and build outputs to improve workflow execution time.
+This action allows caching dependencies and build outputs to **Azure Blob Storage** to improve workflow execution time. It is a fork of the official [actions/cache](https://github.com/actions/cache) with added support for Azure Storage as a cache backend.
 
->Two other actions are available in addition to the primary `cache` action:
+> Two other actions are available in addition to the primary `cache` action:
 >
->* [Restore action](./restore/README.md)
->* [Save action](./save/README.md)
+> * [Restore action](./restore/README.md)
+> * [Save action](./save/README.md)
 
-[![Tests](https://github.com/actions/cache/actions/workflows/workflow.yml/badge.svg)](https://github.com/actions/cache/actions/workflows/workflow.yml)
+## Key Features
 
-## Documentation
+- **Azure Blob Storage Backend**: Store cache in your own Azure Storage Account for full control over data residency and retention
+- **GitHub Cache Fallback**: When Azure is not configured, automatically falls back to GitHub's native cache service
+- **Drop-in Replacement**: Same inputs and outputs as the official `actions/cache` - just add Azure configuration
 
-See ["Caching dependencies to speed up workflows"](https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows).
+## Quick Start
 
-## What's New
+### 1. Create an Azure Storage Account
 
-### ⚠️ Important changes
+1. Go to the [Azure Portal](https://portal.azure.com)
+2. Create a new Storage Account (or use an existing one)
+3. Create a container for cache storage (e.g., `github-actions-cache`)
+4. Copy the connection string from **Access keys** in the Storage Account settings
 
-> [!IMPORTANT]
-> `actions/cache@v5` runs on the Node.js 24 runtime and requires a minimum Actions Runner version of `2.327.1`.
-> If you are using self-hosted runners, ensure they are updated before upgrading.
+### 2. Add the Connection String as a Secret
 
-The cache backend service has been rewritten from the ground up for improved performance and reliability. [actions/cache](https://github.com/actions/cache) now integrates with the new cache service (v2) APIs.
+In your GitHub repository:
+1. Go to **Settings** > **Secrets and variables** > **Actions**
+2. Click **New repository secret**
+3. Name: `AZURE_STORAGE_CONNECTION_STRING`
+4. Value: Your Azure Storage connection string
 
-The new service will gradually roll out as of **February 1st, 2025**. The legacy service will also be sunset on the same date. Changes in these releases are **fully backward compatible**.
+### 3. Use the Action
 
-**We are deprecating some versions of this action**. We recommend upgrading to version `v4` or `v3` as soon as possible before **February 1st, 2025.** (Upgrade instructions below).
-
-If you are using pinned SHAs, please use the SHAs of versions `v4.2.0` or `v3.4.0`.
-
-If you do not upgrade, all workflow runs using any of the deprecated [actions/cache](https://github.com/actions/cache) will fail.
-
-Upgrading to the recommended versions will not break your workflows.
-
-> **Additionally, if you are managing your own GitHub runners, you must update your runner version to `2.231.0` or newer to ensure compatibility with the new cache service.**  
-> Failure to update both the action version and your runner version may result in workflow failures after the migration date.
-
-Read more about the change & access the migration guide: [reference to the announcement](https://github.com/actions/cache/discussions/1510).
-
-### v5
-
-* Updated to node 24
-* Requires a minimum Actions Runner version of `2.327.1`
-
-### v4
-
-* Integrated with the new cache service (v2) APIs.
-* Updated to node 20
-
-### v3
-
-* Integrated with the new cache service (v2) APIs.
-* Added support for caching in GHES 3.5+.
-* Fixed download issue for files > 2GB during restore.
-* Updated the minimum runner version support from node 12 -> node 16.
-* Fixed avoiding empty cache save when no files are available for caching.
-* Fixed tar creation error while trying to create tar with path as `~/` home folder on `ubuntu-latest`.
-* Fixed zstd failing on amazon linux 2.0 runners.
-* Fixed cache not working with github workspace directory or current directory.
-* Fixed the download stuck problem by introducing a timeout of 1 hour for cache downloads.
-* Fix zstd not working for windows on gnu tar in issues.
-* Allowing users to provide a custom timeout as input for aborting download of a cache segment using an environment variable `SEGMENT_DOWNLOAD_TIMEOUT_MINS`. Default is 10 minutes.
-* New actions are available for granular control over caches - [restore](restore/action.yml) and [save](save/action.yml).
-* Support cross-os caching as an opt-in feature. See [Cross OS caching](./tips-and-workarounds.md#cross-os-cache) for more info.
-* Added option to fail job on cache miss. See [Exit workflow on cache miss](./restore/README.md#exit-workflow-on-cache-miss) for more info.
-* Fix zstd not being used after zstd version upgrade to 1.5.4 on hosted runners
-* Added option to lookup cache without downloading it.
-* Reduced segment size to 128MB and segment timeout to 10 minutes to fail fast in case the cache download is stuck.
-
-See the [v2 README.md](https://github.com/actions/cache/blob/v2/README.md) for older updates.
+```yaml
+- name: Cache node modules
+  uses: your-org/azure-cache@v1
+  with:
+    path: node_modules
+    key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+    restore-keys: |
+      ${{ runner.os }}-node-
+    azure-connection-string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+    azure-container-name: github-actions-cache
+```
 
 ## Usage
 
 ### Pre-requisites
 
-Create a workflow `.yml` file in your repository's `.github/workflows` directory. An [example workflow](#example-cache-workflow) is available below. For more information, see the GitHub Help Documentation for [Creating a workflow file](https://help.github.com/en/articles/configuring-a-workflow#creating-a-workflow-file).
+1. **Azure Storage Account** with a blob container for cache storage
+2. **Connection String** stored as a GitHub secret
+3. A workflow `.yml` file in your repository's `.github/workflows` directory
 
 If you are using this inside a container, a POSIX-compliant `tar` needs to be included and accessible from the execution path.
 
-Note: `actions/cache@v5` runs on Node.js 24 and requires a minimum Actions Runner version of `2.327.1`.
-
-If you are using a `self-hosted` Windows runner, `GNU tar` and `zstd` are required for [Cross-OS caching](https://github.com/actions/cache/blob/main/tips-and-workarounds.md#cross-os-cache) to work. They are also recommended to be installed in general so the performance is on par with `hosted` Windows runners.
-
 ### Inputs
 
-* `key` - An explicit key for a cache entry. See [creating a cache key](#creating-a-cache-key).
-* `path` - A list of files, directories, and wildcard patterns to cache and restore. See [`@actions/glob`](https://github.com/actions/toolkit/tree/main/packages/glob) for supported patterns.
-* `restore-keys` - An ordered multiline string listing the prefix-matched keys, that are used for restoring stale cache if no cache hit occurred for key.
-* `enableCrossOsArchive` - An optional boolean when enabled, allows Windows runners to save or restore caches that can be restored or saved respectively on other platforms. Default: `false`
-* `fail-on-cache-miss` - Fail the workflow if cache entry is not found. Default: `false`
-* `lookup-only` - If true, only checks if cache entry exists and skips download. Does not change save cache behavior. Default: `false`
+#### Standard Cache Inputs
 
-#### Environment Variables
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `key` | An explicit key for a cache entry | Yes | - |
+| `path` | A list of files, directories, and wildcard patterns to cache and restore | Yes | - |
+| `restore-keys` | An ordered multiline string listing the prefix-matched keys for restoring stale cache | No | - |
+| `enableCrossOsArchive` | Allow Windows runners to save/restore caches from other platforms | No | `false` |
+| `fail-on-cache-miss` | Fail the workflow if cache entry is not found | No | `false` |
+| `lookup-only` | Only check if cache entry exists, skip download | No | `false` |
+| `upload-chunk-size` | Chunk size for upload in bytes | No | - |
 
-* `SEGMENT_DOWNLOAD_TIMEOUT_MINS` - Segment download timeout (in minutes, default `10`) to abort download of the segment if not completed in the defined number of minutes. [Read more](https://github.com/actions/cache/blob/main/tips-and-workarounds.md#cache-segment-restore-timeout)
+#### Azure Storage Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `azure-connection-string` | Azure Storage connection string. When provided, cache will be stored in Azure Blob Storage | No | - |
+| `azure-container-name` | Azure Blob container name for cache storage | No | `github-actions-cache` |
+
+> **Note**: When `azure-connection-string` is not provided, the action falls back to GitHub's native cache service.
 
 ### Outputs
 
-* `cache-hit` - A string value to indicate an exact match was found for the key.
-  * If there's a cache hit, this will be 'true' or 'false' to indicate if there's an exact match for `key`.
-  * If there's a cache miss, this will be an empty string.
+| Output | Description |
+|--------|-------------|
+| `cache-hit` | A boolean value indicating if an exact match was found for the key |
 
-See [Skipping steps based on cache-hit](#skipping-steps-based-on-cache-hit) for info on using this output
+### Environment Variables
 
-### Cache scopes
+* `SEGMENT_DOWNLOAD_TIMEOUT_MINS` - Segment download timeout (in minutes, default `10`) to abort download if not completed
 
-The cache is scoped to the key, [version](#cache-version), and branch. The default branch cache is available to other branches.
+## Examples
 
-See [Matching a cache key](https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key) for more info.
-
-### Example cache workflow
-
-#### Restoring and saving cache using a single action
+### Basic Usage with Azure Storage
 
 ```yaml
-name: Caching Primes
+name: Build with Azure Cache
 
 on: push
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-    - name: Cache Primes
-      id: cache-primes
-      uses: actions/cache@v5
-      with:
-        path: prime-numbers
-        key: ${{ runner.os }}-primes
-
-    - name: Generate Prime Numbers
-      if: steps.cache-primes.outputs.cache-hit != 'true'
-      run: /generate-primes.sh -d prime-numbers
-
-    - name: Use Prime Numbers
-      run: /primes.sh -d prime-numbers
-```
-
-The `cache` action provides a `cache-hit` output which is set to `true` when the cache is restored using the primary `key` and `false` when the cache is restored using `restore-keys` or no cache is restored.
-
-#### Using a combination of restore and save actions
-
-```yaml
-name: Caching Primes
-
-on: push
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Restore cached Primes
-      id: cache-primes-restore
-      uses: actions/cache/restore@v5
-      with:
-        path: |
-          path/to/dependencies
-          some/other/dependencies
-        key: ${{ runner.os }}-primes
-    .
-    . //intermediate workflow steps
-    .
-    - name: Save Primes
-      id: cache-primes-save
-      uses: actions/cache/save@v5
-      with:
-        path: |
-          path/to/dependencies
-          some/other/dependencies
-        key: ${{ steps.cache-primes-restore.outputs.cache-primary-key }}
-```
-
-> **Note**
-> You must use the `cache` or `restore` action in your workflow before you need to use the files that might be restored from the cache. If the provided `key` matches an existing cache, a new cache is not created and if the provided `key` doesn't match an existing cache, a new cache is automatically created provided the job completes successfully.
-
-## Caching Strategies
-
-With the introduction of the `restore` and `save` actions, a lot of caching use cases can now be achieved. Please see the [caching strategies](./caching-strategies.md) document for understanding how you can use the actions strategically to achieve the desired goal.
-
-## Implementation Examples
-
-Every programming language and framework has its own way of caching.
-
-See [Examples](examples.md) for a list of `actions/cache` implementations for use with:
-
-* [Bun](./examples.md#bun)
-* [C# - NuGet](./examples.md#c---nuget)
-* [Clojure - Lein Deps](./examples.md#clojure---lein-deps)
-* [D - DUB](./examples.md#d---dub)
-* [Deno](./examples.md#deno)
-* [Elixir - Mix](./examples.md#elixir---mix)
-* [Go - Modules](./examples.md#go---modules)
-* [Haskell - Cabal](./examples.md#haskell---cabal)
-* [Haskell - Stack](./examples.md#haskell---stack)
-* [Java - Gradle](./examples.md#java---gradle)
-* [Java - Maven](./examples.md#java---maven)
-* [Node - npm](./examples.md#node---npm)
-* [Node - Lerna](./examples.md#node---lerna)
-* [Node - Yarn](./examples.md#node---yarn)
-* [OCaml/Reason - esy](./examples.md#ocamlreason---esy)
-* [PHP - Composer](./examples.md#php---composer)
-* [Python - pip](./examples.md#python---pip)
-* [Python - pipenv](./examples.md#python---pipenv)
-* [R - renv](./examples.md#r---renv)
-* [Ruby - Bundler](./examples.md#ruby---bundler)
-* [Rust - Cargo](./examples.md#rust---cargo)
-* [Scala - SBT](./examples.md#scala---sbt)
-* [Swift, Objective-C - Carthage](./examples.md#swift-objective-c---carthage)
-* [Swift, Objective-C - CocoaPods](./examples.md#swift-objective-c---cocoapods)
-* [Swift - Swift Package Manager](./examples.md#swift---swift-package-manager)
-* [Swift - Mint](./examples.md#swift---mint)
-
-## Creating a cache key
-
-A cache key can include any of the contexts, functions, literals, and operators supported by GitHub Actions.
-
-For example, using the [`hashFiles`](https://docs.github.com/en/actions/learn-github-actions/expressions#hashfiles) function allows you to create a new cache when dependencies change.
-
-```yaml
-  - uses: actions/cache@v5
-    with:
-      path: |
-        path/to/dependencies
-        some/other/dependencies
-      key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
-```
-
-Additionally, you can use arbitrary command output in a cache key, such as a date or software version:
-
-```yaml
-  # http://man7.org/linux/man-pages/man1/date.1.html
-  - name: Get Date
-    id: get-date
-    run: |
-      echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
-    shell: bash
-
-  - uses: actions/cache@v5
-    with:
-      path: path/to/dependencies
-      key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('**/lockfiles') }}
-```
-
-See [Using contexts to create cache keys](https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows#using-contexts-to-create-cache-keys)
-
-## Cache Limits
-
-A repository can have up to 10GB of caches. Once the 10GB limit is reached, older caches will be evicted based on when the cache was last accessed.  Caches that are not accessed within the last week will also be evicted.
-
-## Skipping steps based on cache-hit
-
-Using the `cache-hit` output, subsequent steps (such as install or build) can be skipped when a cache hit occurs on the key.  It is recommended to install missing/updated dependencies in case of a partial key match when the key is dependent on the `hash` of the package file.
-
-Example:
-
-```yaml
-steps:
-  - uses: actions/checkout@v6
-
-  - uses: actions/cache@v5
-    id: cache
-    with:
-      path: path/to/dependencies
-      key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
-
-  - name: Install Dependencies
-    if: steps.cache.outputs.cache-hit != 'true'
-    run: /install.sh
-```
-
-> **Note** The `id` defined in `actions/cache` must match the `id` in the `if` statement (i.e. `steps.[ID].outputs.cache-hit`)
-
-## Cache Version
-
-Cache version is a hash [generated](https://github.com/actions/toolkit/blob/500d0b42fee2552ae9eeb5933091fe2fbf14e72d/packages/cache/src/internal/cacheHttpClient.ts#L73-L90) for a combination of compression tool used (Gzip, Zstd, etc. based on the runner OS) and the `path` of directories being cached. If two caches have different versions, they are identified as unique caches while matching. This, for example, means that a cache created on a `windows-latest` runner can't be restored on `ubuntu-latest` as cache `Version`s are different.
-
-> Pro tip: The [list caches](https://docs.github.com/en/rest/actions/cache#list-github-actions-caches-for-a-repository) API can be used to get the version of a cache. This can be helpful to troubleshoot cache miss due to version.
-
-<details>
-  <summary>Example</summary>
-The workflow will create 3 unique caches with same keys. Ubuntu and windows runners will use different compression technique and hence create two different caches. And `build-linux` will create two different caches as the `paths` are different.
-
-```yaml
-jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Cache Primes
-        id: cache-primes
-        uses: actions/cache@v5
+      - name: Cache dependencies
+        uses: your-org/azure-cache@v1
         with:
-          path: prime-numbers
-          key: primes
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+          azure-connection-string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
 
-      - name: Generate Prime Numbers
-        if: steps.cache-primes.outputs.cache-hit != 'true'
-        run: ./generate-primes.sh -d prime-numbers
-
-      - name: Cache Numbers
-        id: cache-numbers
-        uses: actions/cache@v5
-        with:
-          path: numbers
-          key: primes
-
-      - name: Generate Numbers
-        if: steps.cache-numbers.outputs.cache-hit != 'true'
-        run: ./generate-primes.sh -d numbers
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Cache Primes
-        id: cache-primes
-        uses: actions/cache@v5
-        with:
-          path: prime-numbers
-          key: primes
-
-      - name: Generate Prime Numbers
-        if: steps.cache-primes.outputs.cache-hit != 'true'
-        run: ./generate-primes -d prime-numbers
+      - name: Install dependencies
+        run: npm ci
 ```
 
-</details>
+### Node.js with npm
 
-## Known practices and workarounds
+```yaml
+- name: Cache node modules
+  id: cache-npm
+  uses: your-org/azure-cache@v1
+  with:
+    path: node_modules
+    key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+    restore-keys: |
+      ${{ runner.os }}-node-
+    azure-connection-string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
 
-There are a number of community practices/workarounds to fulfill specific requirements. You may choose to use them if they suit your use case. Note these are not necessarily the only solution or even a recommended solution.
+- name: Install dependencies
+  if: steps.cache-npm.outputs.cache-hit != 'true'
+  run: npm ci
+```
 
-* [Cache segment restore timeout](./tips-and-workarounds.md#cache-segment-restore-timeout)
-* [Update a cache](./tips-and-workarounds.md#update-a-cache)
-* [Use cache across feature branches](./tips-and-workarounds.md#use-cache-across-feature-branches)
-* [Cross OS cache](./tips-and-workarounds.md#cross-os-cache)
-* [Force deletion of caches overriding default cache eviction policy](./tips-and-workarounds.md#force-deletion-of-caches-overriding-default-cache-eviction-policy)
+### Python with pip
 
-### Windows environment variables
+```yaml
+- name: Cache pip packages
+  uses: your-org/azure-cache@v1
+  with:
+    path: ~/.cache/pip
+    key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+    restore-keys: |
+      ${{ runner.os }}-pip-
+    azure-connection-string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
 
-Please note that Windows environment variables (like `%LocalAppData%`) will NOT be expanded by this action. Instead, prefer using `~` in your paths which will expand to the HOME directory. For example, instead of `%LocalAppData%`, use `~\AppData\Local`. For a list of supported default environment variables, see the [Learn GitHub Actions: Variables](https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables) page.
+- name: Install dependencies
+  run: pip install -r requirements.txt
+```
 
-## Note
+### Go modules
 
-Thank you for your interest in this GitHub repo, however, right now we are not taking contributions. 
+```yaml
+- name: Cache Go modules
+  uses: your-org/azure-cache@v1
+  with:
+    path: |
+      ~/.cache/go-build
+      ~/go/pkg/mod
+    key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+    restore-keys: |
+      ${{ runner.os }}-go-
+    azure-connection-string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+```
 
-We continue to focus our resources on strategic areas that help our customers be successful while making developers' lives easier. While GitHub Actions remains a key part of this vision, we are allocating resources towards other areas of Actions and are not taking contributions to this repository at this time. The GitHub public roadmap is the best place to follow along for any updates on features we’re working on and what stage they’re in.
+### Using Restore and Save Separately
 
-We are taking the following steps to better direct requests related to GitHub Actions, including:
+```yaml
+- name: Restore cache
+  id: cache-restore
+  uses: your-org/azure-cache/restore@v1
+  with:
+    path: node_modules
+    key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+    restore-keys: |
+      ${{ runner.os }}-node-
+    azure-connection-string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
 
-1. We will be directing questions and support requests to our [Community Discussions area](https://github.com/orgs/community/discussions/categories/actions)
+# ... build steps ...
 
-2. High Priority bugs can be reported through Community Discussions or you can report these to our support team https://support.github.com/contact/bug-report.
+- name: Save cache
+  if: always()
+  uses: your-org/azure-cache/save@v1
+  with:
+    path: node_modules
+    key: ${{ steps.cache-restore.outputs.cache-primary-key }}
+    azure-connection-string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+```
 
-3. Security Issues should be handled as per our [security.md](SECURITY.md).
+### Fallback to GitHub Cache
 
-We will still provide security updates for this project and fix major breaking changes during this time.
+If you want to use Azure Storage in some environments and GitHub cache in others:
 
-You are welcome to still raise bugs in this repo.
+```yaml
+- name: Cache with Azure (production) or GitHub (PR)
+  uses: your-org/azure-cache@v1
+  with:
+    path: node_modules
+    key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+    # Only use Azure in production workflows
+    azure-connection-string: ${{ github.event_name == 'push' && secrets.AZURE_STORAGE_CONNECTION_STRING || '' }}
+```
+
+## Azure Storage Setup
+
+### Creating a Storage Account
+
+1. **Azure Portal**:
+   ```
+   Portal > Create a resource > Storage account
+   ```
+
+2. **Azure CLI**:
+   ```bash
+   # Create resource group
+   az group create --name cache-rg --location eastus
+
+   # Create storage account
+   az storage account create \
+     --name mycachestorage \
+     --resource-group cache-rg \
+     --location eastus \
+     --sku Standard_LRS
+
+   # Create container
+   az storage container create \
+     --name github-actions-cache \
+     --account-name mycachestorage
+
+   # Get connection string
+   az storage account show-connection-string \
+     --name mycachestorage \
+     --resource-group cache-rg \
+     --query connectionString \
+     --output tsv
+   ```
+
+### Security Best Practices
+
+1. **Use Secrets**: Always store the connection string as a GitHub secret, never in plain text
+2. **Least Privilege**: Consider using SAS tokens with limited permissions instead of full connection strings
+3. **Network Security**: Enable firewall rules on your storage account to restrict access
+4. **Private Endpoints**: For enhanced security, use Azure Private Endpoints
+5. **Lifecycle Management**: Set up blob lifecycle policies to automatically clean up old caches
+
+### Storage Account Requirements
+
+- **Account Type**: General-purpose v2 (recommended) or Blob storage
+- **Performance**: Standard tier is sufficient for most use cases
+- **Redundancy**: LRS (Locally Redundant Storage) is typically adequate for cache data
+- **Container Access Level**: Private (default)
+
+## Cache Behavior
+
+### How Caching Works
+
+1. **Restore Phase** (workflow start):
+   - Checks for exact match on `key`
+   - If not found, tries prefix matching with `restore-keys`
+   - Downloads and extracts the cache archive
+
+2. **Save Phase** (workflow end):
+   - Creates a tar.gz archive of the specified `path`
+   - Uploads to Azure Blob Storage with the `key` as blob name
+   - Stores metadata (original key, creation time) with the blob
+
+### Cache Key Matching
+
+Cache keys support prefix matching via `restore-keys`:
+
+```yaml
+key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+restore-keys: |
+  ${{ runner.os }}-node-
+  ${{ runner.os }}-
+```
+
+This will:
+1. First try an exact match on the full key
+2. If not found, find the most recent cache starting with `${{ runner.os }}-node-`
+3. If still not found, find the most recent cache starting with `${{ runner.os }}-`
+
+### Cache Limits
+
+**Azure Storage**:
+- No built-in limits (subject to your Azure subscription quotas)
+- Recommended: Set up lifecycle management policies to delete old caches
+
+**GitHub Cache** (fallback):
+- 10GB per repository
+- Caches not accessed in 7 days are evicted
+
+## Comparison with GitHub Cache
+
+| Feature | Azure Cache | GitHub Cache |
+|---------|-------------|--------------|
+| Storage Location | Your Azure Storage Account | GitHub's infrastructure |
+| Storage Limit | Your Azure quota | 10GB per repository |
+| Data Residency | You control | GitHub's data centers |
+| Retention | You control via lifecycle policies | 7 days without access |
+| Cost | Azure Storage pricing | Free (within limits) |
+| Network | Can use private endpoints | Public internet |
+
+## Troubleshooting
+
+### Common Issues
+
+**Cache not found**:
+- Verify the key format matches between save and restore
+- Check if the container exists in your storage account
+- Ensure the connection string has read permissions
+
+**Upload fails**:
+- Verify the connection string has write permissions
+- Check if the storage account allows access from GitHub's IP ranges
+- Ensure the container exists
+
+**Authentication errors**:
+- Verify the connection string is correctly copied
+- Check if the storage account key hasn't been rotated
+- Ensure the secret is properly referenced in the workflow
+
+### Debug Logging
+
+Enable debug logging by setting the `ACTIONS_STEP_DEBUG` secret to `true` in your repository.
+
+## Migration from actions/cache
+
+This action is a drop-in replacement for `actions/cache`. To migrate:
+
+1. Replace `actions/cache@v4` with `your-org/azure-cache@v1`
+2. Add the Azure configuration inputs
+3. Store your connection string as a secret
+
+**Before**:
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: node_modules
+    key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+```
+
+**After**:
+```yaml
+- uses: your-org/azure-cache@v1
+  with:
+    path: node_modules
+    key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+    azure-connection-string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+```
 
 ## License
 
