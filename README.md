@@ -34,7 +34,7 @@ In your GitHub repository:
 
 ```yaml
 - name: Cache node modules
-  uses: your-org/azure-cache@v1
+  uses: weavr-io/azure-cache@v1
   with:
     path: node_modules
     key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
@@ -103,7 +103,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Cache dependencies
-        uses: your-org/azure-cache@v1
+        uses: weavr-io/azure-cache@v1
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
@@ -120,7 +120,7 @@ jobs:
 ```yaml
 - name: Cache node modules
   id: cache-npm
-  uses: your-org/azure-cache@v1
+  uses: weavr-io/azure-cache@v1
   with:
     path: node_modules
     key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
@@ -137,7 +137,7 @@ jobs:
 
 ```yaml
 - name: Cache pip packages
-  uses: your-org/azure-cache@v1
+  uses: weavr-io/azure-cache@v1
   with:
     path: ~/.cache/pip
     key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
@@ -153,7 +153,7 @@ jobs:
 
 ```yaml
 - name: Cache Go modules
-  uses: your-org/azure-cache@v1
+  uses: weavr-io/azure-cache@v1
   with:
     path: |
       ~/.cache/go-build
@@ -169,7 +169,7 @@ jobs:
 ```yaml
 - name: Restore cache
   id: cache-restore
-  uses: your-org/azure-cache/restore@v1
+  uses: weavr-io/azure-cache/restore@v1
   with:
     path: node_modules
     key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
@@ -181,7 +181,7 @@ jobs:
 
 - name: Save cache
   if: always()
-  uses: your-org/azure-cache/save@v1
+  uses: weavr-io/azure-cache/save@v1
   with:
     path: node_modules
     key: ${{ steps.cache-restore.outputs.cache-primary-key }}
@@ -194,7 +194,7 @@ If you want to use Azure Storage in some environments and GitHub cache in others
 
 ```yaml
 - name: Cache with Azure (production) or GitHub (PR)
-  uses: your-org/azure-cache@v1
+  uses: weavr-io/azure-cache@v1
   with:
     path: node_modules
     key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
@@ -329,7 +329,7 @@ Enable debug logging by setting the `ACTIONS_STEP_DEBUG` secret to `true` in you
 
 This action is a drop-in replacement for `actions/cache`. To migrate:
 
-1. Replace `actions/cache@v4` with `your-org/azure-cache@v1`
+1. Replace `actions/cache@v4` with `weavr-io/azure-cache@v1`
 2. Add the Azure configuration inputs
 3. Store your connection string as a secret
 
@@ -343,7 +343,7 @@ This action is a drop-in replacement for `actions/cache`. To migrate:
 
 **After**:
 ```yaml
-- uses: your-org/azure-cache@v1
+- uses: weavr-io/azure-cache@v1
   with:
     path: node_modules
     key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
