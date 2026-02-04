@@ -85,7 +85,6 @@ export class AzureCacheProvider implements ICacheProvider {
                 await this.archiveUtils.extractArchive(archivePath, {
                     compressionMethod: this.compressionMethod
                 });
-                core.info(`Cache restored from key: ${cacheKey}`);
                 return cacheKey;
             } finally {
                 // Cleanup temp files

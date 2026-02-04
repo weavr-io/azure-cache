@@ -1,5 +1,6 @@
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
+import * as glob from "@actions/glob";
 import * as io from "@actions/io";
 import * as fs from "fs";
 import * as path from "path";
@@ -68,18 +69,41 @@ export class ArchiveUtils {
         const workspaceRoot =
             process.env.GITHUB_WORKSPACE || process.cwd();
 
-        // Build manifest file with paths to archive
+        // Expand glob patterns and build manifest file with paths to archive
         const manifestPath = path.join(archiveFolder, "manifest.txt");
-        const manifestContent = cachePaths
-            .map(p => {
-                // Convert to absolute path if relative
-                const absPath = path.isAbsolute(p)
-                    ? p
-                    : path.join(workspaceRoot, p);
-                // Make relative to workspace for tar
-                return path.relative(workspaceRoot, absPath);
-            })
-            .join("\n");
+        const expandedPaths: string[] = [];
+
+        for (const cachePath of cachePaths) {
+            // Check if this is a glob pattern
+            if (cachePath.includes("*") || cachePath.includes("?")) {
+                // Expand glob pattern
+                const pattern = path.isAbsolute(cachePath)
+                    ? cachePath
+                    : path.join(workspaceRoot, cachePath);
+                const globber = await glob.create(pattern, {
+                    followSymbolicLinks: true,
+                    implicitDescendants: false
+                });
+                const matchedPaths = await globber.glob();
+                for (const matchedPath of matchedPaths) {
+                    expandedPaths.push(path.relative(workspaceRoot, matchedPath));
+                }
+            } else {
+                // Non-glob path - convert to relative
+                const absPath = path.isAbsolute(cachePath)
+                    ? cachePath
+                    : path.join(workspaceRoot, cachePath);
+                expandedPaths.push(path.relative(workspaceRoot, absPath));
+            }
+        }
+
+        if (expandedPaths.length === 0) {
+            throw new Error(
+                "No files found matching the provided cache paths"
+            );
+        }
+
+        const manifestContent = expandedPaths.join("\n");
 
         await fs.promises.writeFile(manifestPath, manifestContent);
 

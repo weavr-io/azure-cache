@@ -46196,6 +46196,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ArchiveUtils = void 0;
 const core = __importStar(__nccwpck_require__(37484));
 const exec = __importStar(__nccwpck_require__(95236));
+const glob = __importStar(__nccwpck_require__(47206));
 const io = __importStar(__nccwpck_require__(94994));
 const fs = __importStar(__nccwpck_require__(79896));
 const path = __importStar(__nccwpck_require__(16928));
@@ -46249,18 +46250,37 @@ class ArchiveUtils {
             const compressionArgs = getCompressionArgs(options.compressionMethod);
             // Get workspace root for relative paths
             const workspaceRoot = process.env.GITHUB_WORKSPACE || process.cwd();
-            // Build manifest file with paths to archive
+            // Expand glob patterns and build manifest file with paths to archive
             const manifestPath = path.join(archiveFolder, "manifest.txt");
-            const manifestContent = cachePaths
-                .map(p => {
-                // Convert to absolute path if relative
-                const absPath = path.isAbsolute(p)
-                    ? p
-                    : path.join(workspaceRoot, p);
-                // Make relative to workspace for tar
-                return path.relative(workspaceRoot, absPath);
-            })
-                .join("\n");
+            const expandedPaths = [];
+            for (const cachePath of cachePaths) {
+                // Check if this is a glob pattern
+                if (cachePath.includes("*") || cachePath.includes("?")) {
+                    // Expand glob pattern
+                    const pattern = path.isAbsolute(cachePath)
+                        ? cachePath
+                        : path.join(workspaceRoot, cachePath);
+                    const globber = yield glob.create(pattern, {
+                        followSymbolicLinks: true,
+                        implicitDescendants: false
+                    });
+                    const matchedPaths = yield globber.glob();
+                    for (const matchedPath of matchedPaths) {
+                        expandedPaths.push(path.relative(workspaceRoot, matchedPath));
+                    }
+                }
+                else {
+                    // Non-glob path - convert to relative
+                    const absPath = path.isAbsolute(cachePath)
+                        ? cachePath
+                        : path.join(workspaceRoot, cachePath);
+                    expandedPaths.push(path.relative(workspaceRoot, absPath));
+                }
+            }
+            if (expandedPaths.length === 0) {
+                throw new Error("No files found matching the provided cache paths");
+            }
+            const manifestContent = expandedPaths.join("\n");
             yield fs.promises.writeFile(manifestPath, manifestContent);
             const args = [
                 "--posix",
@@ -46487,7 +46507,6 @@ class AzureCacheProvider {
                     yield this.archiveUtils.extractArchive(archivePath, {
                         compressionMethod: this.compressionMethod
                     });
-                    core.info(`Cache restored from key: ${cacheKey}`);
                     return cacheKey;
                 }
                 finally {
