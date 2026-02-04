@@ -15,6 +15,13 @@ inputs:
     description: 'An optional boolean when enabled, allows windows runners to save caches that can be restored on other platforms'
     default: 'false'
     required: false
+  azure-connection-string:
+    description: 'Azure Storage connection string. When provided, cache will be saved to Azure Blob Storage instead of GitHub Actions cache.'
+    required: false
+  azure-container-name:
+    description: 'Azure Blob container name for cache storage'
+    required: false
+    default: 'github-actions-cache'
 runs:
   using: 'node24'
   main: '../dist/save-only/index.js'

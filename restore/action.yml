@@ -23,6 +23,13 @@ inputs:
     description: 'Check if a cache entry exists for the given input(s) (key, restore-keys) without downloading the cache'
     default: 'false'
     required: false
+  azure-connection-string:
+    description: 'Azure Storage connection string. When provided, cache will be restored from Azure Blob Storage instead of GitHub Actions cache.'
+    required: false
+  azure-container-name:
+    description: 'Azure Blob container name for cache storage'
+    required: false
+    default: 'github-actions-cache'
 outputs:
   cache-hit:
     description: 'A boolean value to indicate an exact match was found for the primary key'

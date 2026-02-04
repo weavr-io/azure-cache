@@ -34,6 +34,13 @@ inputs:
       save-always does not work as intended and will be removed in a future release.
       A separate `actions/cache/restore` step should be used instead.
       See https://github.com/actions/cache/tree/main/save#always-save-cache for more details.
+  azure-connection-string:
+    description: 'Azure Storage connection string. When provided, cache will be stored in Azure Blob Storage instead of GitHub Actions cache.'
+    required: false
+  azure-container-name:
+    description: 'Azure Blob container name for cache storage'
+    required: false
+    default: 'github-actions-cache'
 outputs:
   cache-hit:
     description: 'A boolean value to indicate an exact match was found for the primary key'

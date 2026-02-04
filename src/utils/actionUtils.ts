@@ -1,7 +1,7 @@
 import * as cache from "@actions/cache";
 import * as core from "@actions/core";
 
-import { RefKey } from "../constants";
+import { Inputs, RefKey } from "../constants";
 
 export function isGhes(): boolean {
     const ghUrl = new URL(
@@ -83,4 +83,9 @@ Otherwise please upgrade to GHES version >= 3.5 and If you are also using Github
         "An internal error has occurred in cache backend. Please check https://www.githubstatus.com/ for any ongoing issue in actions."
     );
     return false;
+}
+
+export function isAzureConfigured(): boolean {
+    const connectionString = core.getInput(Inputs.AzureConnectionString);
+    return Boolean(connectionString);
 }

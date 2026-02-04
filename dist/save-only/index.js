@@ -46145,6 +46145,201 @@ module.exports = {
 
 /***/ }),
 
+/***/ 3079:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ArchiveUtils = void 0;
+const core = __importStar(__nccwpck_require__(37484));
+const exec = __importStar(__nccwpck_require__(95236));
+const io = __importStar(__nccwpck_require__(94994));
+const fs = __importStar(__nccwpck_require__(79896));
+const path = __importStar(__nccwpck_require__(16928));
+function getCompressionExtension(method) {
+    switch (method) {
+        case "gzip":
+            return ".tar.gz";
+        case "zstd":
+            return ".tar.zst";
+        case "none":
+            return ".tar";
+    }
+}
+function getCompressionArgs(method) {
+    switch (method) {
+        case "gzip":
+            return ["-z"];
+        case "zstd":
+            return ["--zstd"];
+        case "none":
+            return [];
+    }
+}
+function getTarPath() {
+    return __awaiter(this, void 0, void 0, function* () {
+        // On Windows, prefer GNU tar if available (bsdtar has issues)
+        if (process.platform === "win32") {
+            const gnuTar = yield io
+                .which("tar", false)
+                .catch(() => undefined);
+            if (gnuTar) {
+                return gnuTar;
+            }
+        }
+        return io.which("tar", true);
+    });
+}
+class ArchiveUtils {
+    /**
+     * Create a tar archive from the specified paths
+     * @param archiveFolder - Directory to create the archive in
+     * @param cachePaths - Paths to include in the archive
+     * @param options - Archive options
+     * @returns Full path to the created archive file
+     */
+    createArchive(archiveFolder, cachePaths, options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const extension = getCompressionExtension(options.compressionMethod);
+            const archivePath = path.join(archiveFolder, `cache${extension}`);
+            const tarPath = yield getTarPath();
+            const compressionArgs = getCompressionArgs(options.compressionMethod);
+            // Get workspace root for relative paths
+            const workspaceRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+            // Build manifest file with paths to archive
+            const manifestPath = path.join(archiveFolder, "manifest.txt");
+            const manifestContent = cachePaths
+                .map(p => {
+                // Convert to absolute path if relative
+                const absPath = path.isAbsolute(p)
+                    ? p
+                    : path.join(workspaceRoot, p);
+                // Make relative to workspace for tar
+                return path.relative(workspaceRoot, absPath);
+            })
+                .join("\n");
+            yield fs.promises.writeFile(manifestPath, manifestContent);
+            const args = [
+                "--posix",
+                "-c",
+                ...compressionArgs,
+                "-f",
+                archivePath,
+                "-P",
+                "-C",
+                workspaceRoot,
+                "--files-from",
+                manifestPath
+            ];
+            core.debug(`Creating archive with: ${tarPath} ${args.join(" ")}`);
+            const exitCode = yield exec.exec(tarPath, args, {
+                cwd: workspaceRoot
+            });
+            if (exitCode !== 0) {
+                throw new Error(`Tar failed with exit code ${exitCode}`);
+            }
+            // Clean up manifest
+            yield fs.promises.unlink(manifestPath).catch(() => {
+                // Ignore cleanup errors
+            });
+            return archivePath;
+        });
+    }
+    /**
+     * Extract a tar archive
+     * @param archivePath - Path to the archive file
+     * @param options - Archive options
+     */
+    extractArchive(archivePath, options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const tarPath = yield getTarPath();
+            const compressionArgs = getCompressionArgs(options.compressionMethod);
+            const workspaceRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+            const args = [
+                "-x",
+                ...compressionArgs,
+                "-f",
+                archivePath,
+                "-P",
+                "-C",
+                workspaceRoot
+            ];
+            core.debug(`Extracting archive with: ${tarPath} ${args.join(" ")}`);
+            const exitCode = yield exec.exec(tarPath, args, {
+                cwd: workspaceRoot
+            });
+            if (exitCode !== 0) {
+                throw new Error(`Tar extraction failed with exit code ${exitCode}`);
+            }
+        });
+    }
+    /**
+     * Detect compression method from archive file extension
+     */
+    detectCompressionMethod(archivePath) {
+        if (archivePath.endsWith(".tar.gz") || archivePath.endsWith(".tgz")) {
+            return "gzip";
+        }
+        if (archivePath.endsWith(".tar.zst")) {
+            return "zstd";
+        }
+        return "none";
+    }
+    /**
+     * Get the file extension for a compression method
+     */
+    getArchiveExtension(method) {
+        return getCompressionExtension(method);
+    }
+}
+exports.ArchiveUtils = ArchiveUtils;
+
+
+/***/ }),
+
 /***/ 27242:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -46160,7 +46355,10 @@ var Inputs;
     Inputs["UploadChunkSize"] = "upload-chunk-size";
     Inputs["EnableCrossOsArchive"] = "enableCrossOsArchive";
     Inputs["FailOnCacheMiss"] = "fail-on-cache-miss";
-    Inputs["LookupOnly"] = "lookup-only"; // Input for cache, restore action
+    Inputs["LookupOnly"] = "lookup-only";
+    // Azure Storage inputs
+    Inputs["AzureConnectionString"] = "azure-connection-string";
+    Inputs["AzureContainerName"] = "azure-container-name"; // Azure Blob container name
 })(Inputs || (exports.Inputs = Inputs = {}));
 var Outputs;
 (function (Outputs) {
@@ -46180,6 +46378,448 @@ var Events;
     Events["PullRequest"] = "pull_request";
 })(Events || (exports.Events = Events = {}));
 exports.RefKey = "GITHUB_REF";
+
+
+/***/ }),
+
+/***/ 28930:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __asyncValues = (this && this.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AzureCacheProvider = void 0;
+const storage_blob_1 = __nccwpck_require__(71400);
+const core = __importStar(__nccwpck_require__(37484));
+const crypto = __importStar(__nccwpck_require__(76982));
+const fs = __importStar(__nccwpck_require__(79896));
+const os = __importStar(__nccwpck_require__(70857));
+const path = __importStar(__nccwpck_require__(16928));
+const ArchiveUtils_1 = __nccwpck_require__(3079);
+const CACHE_KEY_METADATA = "cachekey";
+const CREATED_AT_METADATA = "createdat";
+const MAX_BLOB_NAME_LENGTH = 1024;
+class AzureCacheProvider {
+    constructor(config) {
+        this.compressionMethod = "gzip";
+        this.config = config;
+        const blobServiceClient = storage_blob_1.BlobServiceClient.fromConnectionString(config.connectionString);
+        this.containerClient = blobServiceClient.getContainerClient(config.containerName);
+        this.archiveUtils = new ArchiveUtils_1.ArchiveUtils();
+    }
+    isAvailable() {
+        return Boolean(this.config.connectionString);
+    }
+    restoreCache(cachePaths, primaryKey, restoreKeys, options, 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _enableCrossOsArchive) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // Ensure container exists
+                yield this.ensureContainerExists();
+                // Find matching blob
+                const match = yield this.findMatchingBlob(primaryKey, restoreKeys);
+                if (!match) {
+                    core.info("No cache found matching the provided keys");
+                    return undefined;
+                }
+                const { cacheKey, blobName } = match;
+                core.info(`Cache found for key: ${cacheKey}`);
+                if (options === null || options === void 0 ? void 0 : options.lookupOnly) {
+                    core.info("Lookup only mode - skipping download");
+                    return cacheKey;
+                }
+                // Download and extract
+                const tempDir = yield this.createTempDirectory();
+                const archiveExtension = this.archiveUtils.getArchiveExtension(this.compressionMethod);
+                const archivePath = path.join(tempDir, `cache${archiveExtension}`);
+                try {
+                    yield this.downloadBlob(blobName, archivePath);
+                    yield this.archiveUtils.extractArchive(archivePath, {
+                        compressionMethod: this.compressionMethod
+                    });
+                    core.info(`Cache restored from key: ${cacheKey}`);
+                    return cacheKey;
+                }
+                finally {
+                    // Cleanup temp files
+                    yield this.cleanupTempDirectory(tempDir);
+                }
+            }
+            catch (error) {
+                core.warning(`Failed to restore cache: ${error.message}`);
+                return undefined;
+            }
+        });
+    }
+    saveCache(cachePaths, primaryKey, 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _options, 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _enableCrossOsArchive) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // Ensure container exists
+                yield this.ensureContainerExists();
+                const blobName = this.sanitizeBlobName(primaryKey);
+                // Check if cache already exists
+                const blobClient = this.containerClient.getBlobClient(blobName);
+                const exists = yield blobClient.exists();
+                if (exists) {
+                    core.info(`Cache already exists for key: ${primaryKey}, skipping save`);
+                    return -1;
+                }
+                // Create archive
+                const tempDir = yield this.createTempDirectory();
+                try {
+                    const archivePath = yield this.archiveUtils.createArchive(tempDir, cachePaths, { compressionMethod: this.compressionMethod });
+                    // Get archive size for logging
+                    const stats = yield fs.promises.stat(archivePath);
+                    core.info(`Archive created: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+                    // Upload to Azure
+                    yield this.uploadBlob(blobName, archivePath, primaryKey);
+                    core.info(`Cache saved with key: ${primaryKey}`);
+                    // Return a positive ID (timestamp-based)
+                    return Date.now();
+                }
+                finally {
+                    yield this.cleanupTempDirectory(tempDir);
+                }
+            }
+            catch (error) {
+                core.warning(`Failed to save cache: ${error.message}`);
+                return -1;
+            }
+        });
+    }
+    ensureContainerExists() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield this.containerClient.createIfNotExists();
+            }
+            catch (error) {
+                // Container might already exist or we might not have create permissions
+                core.debug(`Container check/create: ${error.message}`);
+            }
+        });
+    }
+    findMatchingBlob(primaryKey, restoreKeys) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, e_1, _b, _c;
+            var _d;
+            // Try exact match first
+            const primaryBlobName = this.sanitizeBlobName(primaryKey);
+            const primaryBlob = this.containerClient.getBlobClient(primaryBlobName);
+            const primaryExists = yield primaryBlob.exists();
+            if (primaryExists) {
+                return { cacheKey: primaryKey, blobName: primaryBlobName };
+            }
+            // Try prefix matching with restore keys
+            for (const restoreKey of restoreKeys) {
+                const prefix = this.sanitizeBlobName(restoreKey);
+                const matches = [];
+                try {
+                    for (var _e = true, _f = (e_1 = void 0, __asyncValues(this.containerClient.listBlobsFlat({
+                        prefix
+                    }))), _g; _g = yield _f.next(), _a = _g.done, !_a; _e = true) {
+                        _c = _g.value;
+                        _e = false;
+                        const blob = _c;
+                        // Get the original cache key from metadata
+                        const blobClient = this.containerClient.getBlobClient(blob.name);
+                        const properties = yield blobClient.getProperties();
+                        const originalKey = ((_d = properties.metadata) === null || _d === void 0 ? void 0 : _d[CACHE_KEY_METADATA]) || blob.name;
+                        matches.push({
+                            blobItem: blob,
+                            cacheKey: originalKey
+                        });
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (!_e && !_a && (_b = _f.return)) yield _b.call(_f);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                if (matches.length > 0) {
+                    // Sort by last modified (most recent first) and return
+                    matches.sort((a, b) => {
+                        var _a, _b;
+                        const timeA = ((_a = a.blobItem.properties.lastModified) === null || _a === void 0 ? void 0 : _a.getTime()) || 0;
+                        const timeB = ((_b = b.blobItem.properties.lastModified) === null || _b === void 0 ? void 0 : _b.getTime()) || 0;
+                        return timeB - timeA;
+                    });
+                    const bestMatch = matches[0];
+                    return {
+                        cacheKey: bestMatch.cacheKey,
+                        blobName: bestMatch.blobItem.name
+                    };
+                }
+            }
+            return undefined;
+        });
+    }
+    downloadBlob(blobName, destinationPath) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const blobClient = this.containerClient.getBlobClient(blobName);
+            core.info(`Downloading cache from Azure Storage...`);
+            const downloadResponse = yield blobClient.download();
+            if (!downloadResponse.readableStreamBody) {
+                throw new Error("Failed to get download stream");
+            }
+            const writeStream = fs.createWriteStream(destinationPath);
+            yield new Promise((resolve, reject) => {
+                downloadResponse.readableStreamBody.pipe(writeStream)
+                    .on("finish", resolve)
+                    .on("error", reject);
+            });
+            core.info("Download complete");
+        });
+    }
+    uploadBlob(blobName, sourcePath, cacheKey) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
+            core.info(`Uploading cache to Azure Storage...`);
+            const stats = yield fs.promises.stat(sourcePath);
+            const fileStream = fs.createReadStream(sourcePath);
+            yield blockBlobClient.uploadStream(fileStream, stats.size, 4, {
+                metadata: {
+                    [CACHE_KEY_METADATA]: cacheKey,
+                    [CREATED_AT_METADATA]: new Date().toISOString()
+                }
+            });
+            core.info("Upload complete");
+        });
+    }
+    sanitizeBlobName(key) {
+        // Replace characters that are invalid in blob names
+        // Blob names can't contain: \ ? # and some control characters
+        let sanitized = key
+            .replace(/\\/g, "_")
+            .replace(/\?/g, "_")
+            .replace(/#/g, "_")
+            .replace(/\s+/g, "_");
+        // If the name is too long, truncate and add hash
+        if (sanitized.length > MAX_BLOB_NAME_LENGTH) {
+            const hash = crypto
+                .createHash("sha256")
+                .update(key)
+                .digest("hex")
+                .substring(0, 8);
+            const maxBaseLength = MAX_BLOB_NAME_LENGTH - hash.length - 1;
+            sanitized = `${sanitized.substring(0, maxBaseLength)}_${hash}`;
+        }
+        return sanitized;
+    }
+    createTempDirectory() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const tempBase = process.env.RUNNER_TEMP || os.tmpdir();
+            const tempDir = path.join(tempBase, `azure-cache-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
+            yield fs.promises.mkdir(tempDir, { recursive: true });
+            return tempDir;
+        });
+    }
+    cleanupTempDirectory(tempDir) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield fs.promises.rm(tempDir, { recursive: true, force: true });
+            }
+            catch (error) {
+                core.debug(`Failed to cleanup temp directory: ${error.message}`);
+            }
+        });
+    }
+}
+exports.AzureCacheProvider = AzureCacheProvider;
+
+
+/***/ }),
+
+/***/ 40895:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.createCacheProvider = createCacheProvider;
+exports.isAzureConfigured = isAzureConfigured;
+const core = __importStar(__nccwpck_require__(37484));
+const constants_1 = __nccwpck_require__(27242);
+const AzureCacheProvider_1 = __nccwpck_require__(28930);
+const GitHubCacheProvider_1 = __nccwpck_require__(68024);
+const DEFAULT_CONTAINER_NAME = "github-actions-cache";
+function createCacheProvider() {
+    const connectionString = core.getInput(constants_1.Inputs.AzureConnectionString);
+    const containerName = core.getInput(constants_1.Inputs.AzureContainerName) || DEFAULT_CONTAINER_NAME;
+    if (connectionString) {
+        core.info("Using Azure Blob Storage cache provider");
+        // Mask the connection string in logs
+        core.setSecret(connectionString);
+        return new AzureCacheProvider_1.AzureCacheProvider({
+            connectionString,
+            containerName
+        });
+    }
+    core.info("Using GitHub Actions cache provider");
+    return new GitHubCacheProvider_1.GitHubCacheProvider();
+}
+function isAzureConfigured() {
+    const connectionString = core.getInput(constants_1.Inputs.AzureConnectionString);
+    return Boolean(connectionString);
+}
+
+
+/***/ }),
+
+/***/ 68024:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GitHubCacheProvider = void 0;
+const cache = __importStar(__nccwpck_require__(5116));
+class GitHubCacheProvider {
+    isAvailable() {
+        return cache.isFeatureAvailable();
+    }
+    restoreCache(cachePaths, primaryKey, restoreKeys, options, enableCrossOsArchive) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return cache.restoreCache(cachePaths, primaryKey, restoreKeys, { lookupOnly: options === null || options === void 0 ? void 0 : options.lookupOnly }, enableCrossOsArchive);
+        });
+    }
+    saveCache(cachePaths, primaryKey, options, enableCrossOsArchive) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return cache.saveCache(cachePaths, primaryKey, { uploadChunkSize: options === null || options === void 0 ? void 0 : options.uploadChunkSize }, enableCrossOsArchive);
+        });
+    }
+}
+exports.GitHubCacheProvider = GitHubCacheProvider;
 
 
 /***/ }),
@@ -46235,9 +46875,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.saveImpl = saveImpl;
 exports.saveOnlyRun = saveOnlyRun;
 exports.saveRun = saveRun;
-const cache = __importStar(__nccwpck_require__(5116));
 const core = __importStar(__nccwpck_require__(37484));
 const constants_1 = __nccwpck_require__(27242);
+const CacheProviderFactory_1 = __nccwpck_require__(40895);
 const stateProvider_1 = __nccwpck_require__(52879);
 const utils = __importStar(__nccwpck_require__(8270));
 // Catch and log any unhandled exceptions.  These exceptions can leak out of the uploadChunk method in
@@ -46248,7 +46888,9 @@ function saveImpl(stateProvider) {
     return __awaiter(this, void 0, void 0, function* () {
         let cacheId = -1;
         try {
-            if (!utils.isCacheFeatureAvailable()) {
+            const cacheProvider = (0, CacheProviderFactory_1.createCacheProvider)();
+            if (!cacheProvider.isAvailable()) {
+                utils.logWarning("Cache provider is not available");
                 return;
             }
             if (!utils.isValidEvent()) {
@@ -46274,7 +46916,7 @@ function saveImpl(stateProvider) {
                 required: true
             });
             const enableCrossOsArchive = utils.getInputAsBool(constants_1.Inputs.EnableCrossOsArchive);
-            cacheId = yield cache.saveCache(cachePaths, primaryKey, { uploadChunkSize: utils.getInputAsInt(constants_1.Inputs.UploadChunkSize) }, enableCrossOsArchive);
+            cacheId = yield cacheProvider.saveCache(cachePaths, primaryKey, { uploadChunkSize: utils.getInputAsInt(constants_1.Inputs.UploadChunkSize) }, enableCrossOsArchive);
             if (cacheId != -1) {
                 core.info(`Cache saved with key: ${primaryKey}`);
             }
@@ -46466,6 +47108,7 @@ exports.getInputAsArray = getInputAsArray;
 exports.getInputAsInt = getInputAsInt;
 exports.getInputAsBool = getInputAsBool;
 exports.isCacheFeatureAvailable = isCacheFeatureAvailable;
+exports.isAzureConfigured = isAzureConfigured;
 const cache = __importStar(__nccwpck_require__(5116));
 const core = __importStar(__nccwpck_require__(37484));
 const constants_1 = __nccwpck_require__(27242);
@@ -46521,6 +47164,10 @@ Otherwise please upgrade to GHES version >= 3.5 and If you are also using Github
     }
     logWarning("An internal error has occurred in cache backend. Please check https://www.githubstatus.com/ for any ongoing issue in actions.");
     return false;
+}
+function isAzureConfigured() {
+    const connectionString = core.getInput(constants_1.Inputs.AzureConnectionString);
+    return Boolean(connectionString);
 }
 
 

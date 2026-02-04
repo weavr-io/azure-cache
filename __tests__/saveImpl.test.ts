@@ -63,6 +63,8 @@ beforeEach(() => {
     jest.spyOn(actionUtils, "isCacheFeatureAvailable").mockImplementation(
         () => true
     );
+    // Mock cache.isFeatureAvailable for the GitHubCacheProvider
+    jest.spyOn(cache, "isFeatureAvailable").mockImplementation(() => true);
 });
 
 afterEach(() => {
@@ -112,6 +114,7 @@ test("save without AC available should no-op", async () => {
     jest.spyOn(actionUtils, "isCacheFeatureAvailable").mockImplementation(
         () => false
     );
+    jest.spyOn(cache, "isFeatureAvailable").mockImplementation(() => false);
 
     const saveCacheMock = jest.spyOn(cache, "saveCache");
 
@@ -125,6 +128,7 @@ test("save on ghes without AC available should no-op", async () => {
     jest.spyOn(actionUtils, "isCacheFeatureAvailable").mockImplementation(
         () => false
     );
+    jest.spyOn(cache, "isFeatureAvailable").mockImplementation(() => false);
 
     const saveCacheMock = jest.spyOn(cache, "saveCache");
 

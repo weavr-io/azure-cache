@@ -1,7 +1,7 @@
-import * as cache from "@actions/cache";
 import * as core from "@actions/core";
 
 import { Events, Inputs, State } from "./constants";
+import { createCacheProvider } from "./providers/CacheProviderFactory";
 import {
     IStateProvider,
     NullStateProvider,
@@ -19,7 +19,10 @@ export async function saveImpl(
 ): Promise<number | void> {
     let cacheId = -1;
     try {
-        if (!utils.isCacheFeatureAvailable()) {
+        const cacheProvider = createCacheProvider();
+
+        if (!cacheProvider.isAvailable()) {
+            utils.logWarning("Cache provider is not available");
             return;
         }
 
@@ -62,7 +65,7 @@ export async function saveImpl(
             Inputs.EnableCrossOsArchive
         );
 
-        cacheId = await cache.saveCache(
+        cacheId = await cacheProvider.saveCache(
             cachePaths,
             primaryKey,
             { uploadChunkSize: utils.getInputAsInt(Inputs.UploadChunkSize) },

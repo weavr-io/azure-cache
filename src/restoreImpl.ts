@@ -1,7 +1,7 @@
-import * as cache from "@actions/cache";
 import * as core from "@actions/core";
 
 import { Events, Inputs, Outputs, State } from "./constants";
+import { createCacheProvider } from "./providers/CacheProviderFactory";
 import {
     IStateProvider,
     NullStateProvider,
@@ -14,7 +14,10 @@ export async function restoreImpl(
     earlyExit?: boolean | undefined
 ): Promise<string | undefined> {
     try {
-        if (!utils.isCacheFeatureAvailable()) {
+        const cacheProvider = createCacheProvider();
+
+        if (!cacheProvider.isAvailable()) {
+            utils.logWarning("Cache provider is not available");
             core.setOutput(Outputs.CacheHit, "false");
             return;
         }
@@ -42,7 +45,7 @@ export async function restoreImpl(
         const failOnCacheMiss = utils.getInputAsBool(Inputs.FailOnCacheMiss);
         const lookupOnly = utils.getInputAsBool(Inputs.LookupOnly);
 
-        const cacheKey = await cache.restoreCache(
+        const cacheKey = await cacheProvider.restoreCache(
             cachePaths,
             primaryKey,
             restoreKeys,

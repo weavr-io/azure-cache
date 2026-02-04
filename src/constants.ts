@@ -5,7 +5,11 @@ export enum Inputs {
     UploadChunkSize = "upload-chunk-size", // Input for cache, save action
     EnableCrossOsArchive = "enableCrossOsArchive", // Input for cache, restore, save action
     FailOnCacheMiss = "fail-on-cache-miss", // Input for cache, restore action
-    LookupOnly = "lookup-only" // Input for cache, restore action
+    LookupOnly = "lookup-only", // Input for cache, restore action
+
+    // Azure Storage inputs
+    AzureConnectionString = "azure-connection-string", // Azure Storage connection string
+    AzureContainerName = "azure-container-name" // Azure Blob container name
 }
 
 export enum Outputs {

@@ -46,6 +46,8 @@ beforeEach(() => {
     jest.spyOn(actionUtils, "isCacheFeatureAvailable").mockImplementation(
         () => true
     );
+    // Mock cache.isFeatureAvailable for the GitHubCacheProvider
+    jest.spyOn(cache, "isFeatureAvailable").mockImplementation(() => true);
 });
 
 afterEach(() => {
@@ -72,6 +74,7 @@ test("restore without AC available should no-op", async () => {
     jest.spyOn(actionUtils, "isCacheFeatureAvailable").mockImplementation(
         () => false
     );
+    jest.spyOn(cache, "isFeatureAvailable").mockImplementation(() => false);
 
     const restoreCacheMock = jest.spyOn(cache, "restoreCache");
     const setCacheHitOutputMock = jest.spyOn(core, "setOutput");
@@ -88,6 +91,7 @@ test("restore on GHES without AC available should no-op", async () => {
     jest.spyOn(actionUtils, "isCacheFeatureAvailable").mockImplementation(
         () => false
     );
+    jest.spyOn(cache, "isFeatureAvailable").mockImplementation(() => false);
 
     const restoreCacheMock = jest.spyOn(cache, "restoreCache");
     const setCacheHitOutputMock = jest.spyOn(core, "setOutput");

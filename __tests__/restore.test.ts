@@ -45,6 +45,8 @@ beforeEach(() => {
     jest.spyOn(actionUtils, "isCacheFeatureAvailable").mockImplementation(
         () => true
     );
+    // Mock cache.isFeatureAvailable for the GitHubCacheProvider
+    jest.spyOn(cache, "isFeatureAvailable").mockImplementation(() => true);
 });
 
 afterEach(() => {
