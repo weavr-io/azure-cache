@@ -46546,7 +46546,6 @@ class AzureCacheProvider {
                     core.info(`Archive created: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
                     // Upload to Azure
                     yield this.uploadBlob(blobName, archivePath, primaryKey);
-                    core.info(`Cache saved with key: ${primaryKey}`);
                     // Return a positive ID (timestamp-based)
                     return Date.now();
                 }

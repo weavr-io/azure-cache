@@ -140,7 +140,6 @@ export class AzureCacheProvider implements ICacheProvider {
                 // Upload to Azure
                 await this.uploadBlob(blobName, archivePath, primaryKey);
 
-                core.info(`Cache saved with key: ${primaryKey}`);
                 // Return a positive ID (timestamp-based)
                 return Date.now();
             } finally {
